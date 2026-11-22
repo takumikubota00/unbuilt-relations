@@ -302,6 +302,21 @@ body.viewmode .panel.left .tabs{display:none}
 body.viewmode .eratabs .cross{display:none}
 body.viewmode .status{display:none}
 body.viewmode .titleblock{display:none!important}
+.figlg{position:absolute;top:8px;right:8px;z-index:4;max-width:min(200px,calc(100% - 16px));max-height:calc(100% - 16px);overflow:auto;background:color-mix(in srgb,var(--sheet-bg) 94%,transparent);color:var(--sheet-ink);border:1px solid var(--rule);border-radius:8px;box-shadow:0 6px 18px -10px rgba(0,0,0,.35);font-size:11.5px;line-height:1.45}
+.figlg .fh{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;border:0;background:none;padding:6px 10px;font-weight:700;font-size:12px;color:inherit}
+.figlg .fh .ch{font-weight:400;color:var(--ink-3)}
+.figlg .fb{padding:0 10px 8px;display:grid;gap:7px}
+.figlg .ft{font-size:10.5px;color:var(--ink-3);margin-bottom:1px}
+.figlg .fr{display:grid;grid-template-columns:26px minmax(0,1fr);gap:6px;align-items:center}
+.figlg .fr i{width:13px;height:13px;border-radius:3px;display:block;justify-self:center}
+.figlg .fr svg{width:26px;height:10px}
+.figlg .tg{display:inline-grid;place-items:center;width:15px;height:15px;border-radius:3px;font-size:9.5px;font-weight:700;font-style:normal;margin-right:2px}
+.grab{display:none}
+@media (max-width: 980px){
+  body.viewmode .grab{display:block;position:sticky;top:0;height:20px;margin-bottom:-6px;background:var(--panel);z-index:3;touch-action:none}
+  body.viewmode .grab::before{content:"";position:absolute;left:50%;top:7px;width:42px;height:5px;margin-left:-21px;border-radius:3px;background:var(--rule)}
+  .figlg{font-size:11px;max-width:min(230px,calc(100% - 16px))}
+}
 body.viewmode input#search.edit-only{display:inline-block!important}
 body.viewmode .eratabs label.cross{display:none!important}
 .vpick{display:inline-flex;border:1px solid var(--rule);border-radius:6px;overflow:hidden;margin:0 0 8px}
@@ -351,7 +366,7 @@ body.viewmode .eratabs label.cross{display:none!important}
 </head>
 <body>
 <header class="bar">
-  <button class="btn only-narrow" id="btnLeft" aria-label="凡例とスタイルを開く">凡例</button>
+  <button class="btn only-narrow" id="btnLeft" aria-label="検索・色分け・凡例を開く">メニュー</button>
   <h1 class="title" id="appTitle">アンビルト関係図</h1>
   
   <button class="btn primary edit-only" id="btnAddNode" title="項目を選んでノードを追加">＋ ノード</button>
@@ -407,6 +422,7 @@ body.viewmode .eratabs label.cross{display:none!important}
       <div class="titleblock" id="titleblock"></div>
       <div class="banner" id="banner"><span id="bannerText"></span><button id="bannerCancel">やめる</button></div>
       <div class="tip" id="tip"></div>
+      <div class="figlg" id="figlg" aria-label="凡例"></div>
     </div>
   </section>
 
@@ -1840,7 +1856,8 @@ function runLayout(name) {
 function fit() {
   const v = cy.elements().not('.hidden').not('.anchor'); if (!v.length) return;
   const tb = $('#titleblock'), tbH = (tb && !tb.hidden && tb.offsetParent) ? tb.offsetHeight + 14 : 0, sh = typeof sheetCover === 'function' ? sheetCover() : 0;
-  const bb = v.boundingBox(), pad = 40, W = cy.width(), H = cy.height(), vh = Math.max(120, H - Math.max(tbH, sh));
+  const lg = $('#figlg'), lgW = (!isNarrow() && figLgOpen && lg && lg.offsetWidth) ? lg.offsetWidth + 16 : 0;  // 右上の凡例に重ならないように
+  const bb = v.boundingBox(), pad = 40, W = cy.width() - lgW, H = cy.height(), vh = Math.max(120, H - Math.max(tbH, sh));
   const z = clamp(Math.min((W - pad * 2) / Math.max(1, bb.w), (vh - pad * 1.5) / Math.max(1, bb.h)), cy.minZoom(), cy.maxZoom());
   cy.viewport({ zoom: z, pan: { x: W / 2 - z * (bb.x1 + bb.w / 2), y: (vh + pad * 0.25) / 2 - z * (bb.y1 + bb.h / 2) } });
 }
@@ -3226,9 +3243,10 @@ function renderViewInspector() {
   const root = $('#inspector');
   const sel = cy ? cy.$(':selected').not(HELPER) : null;
   root.scrollTop = 0;
-  if (sel && sel.nodes().length === 1 && nodes.has(sel.nodes()[0].id())) return root.replaceChildren(...viewNodePanel(nodes.get(sel.nodes()[0].id())).filter(Boolean));
-  if (sel && sel.edges().length === 1 && edges.has(sel.edges()[0].id())) return root.replaceChildren(...viewEdgePanel(edges.get(sel.edges()[0].id())).filter(Boolean));
-  root.replaceChildren(...viewEmptyPanel());
+  const G = () => h('div', { class: 'grab', title: '下にスワイプで閉じる' });
+  if (sel && sel.nodes().length === 1 && nodes.has(sel.nodes()[0].id())) return root.replaceChildren(G(), ...viewNodePanel(nodes.get(sel.nodes()[0].id())).filter(Boolean));
+  if (sel && sel.edges().length === 1 && edges.has(sel.edges()[0].id())) return root.replaceChildren(G(), ...viewEdgePanel(edges.get(sel.edges()[0].id())).filter(Boolean));
+  root.replaceChildren(G(), ...viewEmptyPanel());
 }
 function viewSpotPicker() {
   const key = (S.spot && (S.spot.key === 'theme' || S.spot.key === 'motif')) ? S.spot.key : 'theme';
@@ -3248,8 +3266,26 @@ function viewSpotPicker() {
     opts.length ? h('div', { class: 'spotsub' }, h('div', { class: 'hh', style: 'font-size:12px;color:var(--ink-2);margin-bottom:4px', text: 'その主題の中のグループを色分け' }),
       h('div', { class: 'spotchips', role: 'group' }, opts.map(m => { const c = spotSubColor(m.id); return h('button', { type: 'button', class: 'spotchip sub' + (c ? ' on' : ''), style: c ? `--hl:${c}` : null, 'aria-pressed': c ? 'true' : 'false', title: m.name, onclick: () => save(key, ids, subs.includes(m.id) ? subs.filter(x => x !== m.id) : [...subs, m.id]) }, h('span', { class: 'dot' }), h('span', { text: m.short || m.name })); }))) : null);
 }
+let figLgOpen = !window.matchMedia('(max-width: 980px)').matches;
+function renderFigLegend() {
+  const box = $('#figlg'); if (!box) return;
+  const ck = S.colorBy;
+  const colorRows = (!S.style.mono && fdef(ck)) ? vocab(ck).filter(v => v.visible !== false && [...nodes.values()].some(n => isNodeVisible(n) && realVals(n, ck)[0] === v.id)) : [];
+  const threads = S.threads.filter(t => t.visible !== false && [...edges.values()].some(e => e.thread === t.id && isEdgeVisible(e)));
+  const ths = vocab('theme').filter(v => v.visible !== false);
+  const head = h('button', { type: 'button', class: 'fh', 'aria-expanded': String(figLgOpen), onclick: () => { figLgOpen = !figLgOpen; renderFigLegend(); } }, h('span', { text: '凡例' }), h('span', { class: 'ch', text: figLgOpen ? '閉じる ▴' : '開く ▾' }));
+  if (!figLgOpen) return box.replaceChildren(head);
+  box.replaceChildren(head, h('div', { class: 'fb' },
+    colorRows.length ? h('div', {}, h('div', { class: 'ft', text: '四角の色＝流通の型' }), colorRows.map(v => h('div', { class: 'fr' }, h('i', { style: `background:${mix(v.color || '#9AA0A6', S.style.bg, S.style.fill === 'solid' ? 0 : 0.55)};border:1.5px solid ${v.color || '#9AA0A6'}` }), h('span', { text: v.name.replace(/（.*$/, '') })))) : null,
+    threads.length ? h('div', {}, h('div', { class: 'ft', text: '線の色＝関係の種類' }), threads.map(t => h('div', { class: 'fr' }, relSample(t, 'confirmed'), h('span', { text: t.name.replace(/（.*$/, '') })))) : null,
+    h('div', {}, h('div', { class: 'ft', text: '線の種類' }),
+      h('div', { class: 'fr' }, relSample({ color: S.style.ink }, 'confirmed'), h('span', { text: '実線＝直接の関係' })),
+      h('div', { class: 'fr' }, relSample({ color: S.style.ink }, 'parallel'), h('span', { text: '破線＝似ている・同じ時期' }))),
+    h('div', {}, h('div', { class: 'ft', text: '四角の上の印・淡い円＝主題' }),
+      h('div', {}, ths.map(t => h('span', { style: 'display:inline-flex;align-items:center;margin:0 6px 2px 0' }, h('i', { class: 'tg', style: `background:${t.color || '#999'};color:${luma(t.color || '#999') > 0.6 ? '#1A1A1A' : '#FFF'}`, text: (t.short || t.name || '?').slice(0, 1) }), h('span', { text: (t.short || t.name).replace(/（.*$/, '') })))))));
+}
 function renderViewLegend() {
-  const root = $('#legend');
+  const root = $('#legend'); renderFigLegend();
   const ck = S.colorBy, colorRows = (!S.style.mono && fdef(ck)) ? vocab(ck).filter(v => v.visible !== false && [...nodes.values()].some(n => isNodeVisible(n) && realVals(n, ck)[0] === v.id)) : [];
   const ths = vocab(S.mode === 'group' ? gKey() : 'theme').filter(v => v.visible !== false);
   const usedThreads = S.threads.filter(t => t.visible !== false && [...edges.values()].some(e => e.thread === t.id && isEdgeVisible(e)));
@@ -3565,10 +3601,32 @@ function subscribeRemote() {
     }, onErr);
   } catch (e) { console.warn('subscribe failed', e); }
 }
+// スマートフォン：下から出る詳細欄を、下にスワイプして閉じる
+function bindSheetSwipe() {
+  const el = $('#inspector'); let y0 = null, dy = 0;
+  el.addEventListener('touchstart', e => {
+    if (!isNarrow() || !document.body.classList.contains('show-right')) return;
+    if (!(e.target.closest('.grab') || el.scrollTop <= 0)) { y0 = null; return; }
+    y0 = e.touches[0].clientY; dy = 0; el.style.transition = 'none';
+  }, { passive: true });
+  el.addEventListener('touchmove', e => {
+    if (y0 == null) return;
+    dy = e.touches[0].clientY - y0;
+    if (dy <= 0 || (el.scrollTop > 0 && !e.target.closest('.grab'))) { if (dy <= 0) { el.style.transform = ''; } else { y0 = null; el.style.transform = ''; el.style.transition = ''; } return; }
+    el.style.transform = `translateY(${dy}px)`; if (e.cancelable) e.preventDefault();
+  }, { passive: false });
+  const end = () => {
+    if (y0 == null) return;
+    el.style.transition = ''; el.style.transform = '';
+    if (dy > 70) { document.body.classList.remove('show-right'); if (cy) cy.elements().unselect(); }
+    y0 = null; dy = 0;
+  };
+  el.addEventListener('touchend', end); el.addEventListener('touchcancel', end);
+}
 async function init() {
   if (typeof window.cytoscape !== 'function') { setStatus('図の部品を読み込めませんでした。再読み込みしてください', 'err'); return; }
   cy = cytoscape({ container: $('#cy'), elements: [], style: buildStyle(), wheelSensitivity: 0.35, minZoom: 0.06, maxZoom: 5, boxSelectionEnabled: true, selectionType: 'single' });
-  bindCy(); bindUi(); renderAll();
+  bindCy(); bindUi(); renderAll(); bindSheetSwipe();
   const c = null; // 公開用：データベースを使わない
   let user = null;
   if (c && typeof c.use === 'function') { const [d, a, dl, u] = await Promise.all(['db', 'assets', 'downloads', 'user'].map(n => c.use(n).catch(() => null))); db = d; assets = a; downloads = dl; user = u; }
